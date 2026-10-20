@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+enum UserRole { CUSTOMER TASKER ADMIN }
+enum AccountStatus { ACTIVE PENDING SUSPENDED CLOSED }
+enum TaskStatus { OPEN OFFER_SELECTED BOOKED IN_PROGRESS COMPLETION_REVIEW COMPLETED CANCELLED DISPUTED }
+enum OfferStatus { PENDING ACCEPTED DECLINED WITHDRAWN }
+enum PaymentStatus { PAYMENT_SUBMITTED AWAITING_REVIEW UNDER_REVIEW MORE_INFO_REQUIRED PAYMENT_VERIFIED PAYMENT_REJECTED ESCALATED CANCELLED }
+enum PayoutStatus { PENDING RESERVED EXPORTED PROCESSING PAID FAILED RETURNED HELD }
+model User {
+ id String @id @default(cuid())
+ accountId String @unique
+ email String @unique
+ passwordHash String
+ role UserRole
+ status AccountStatus @default(PENDING)
+ fullName String
+ phone String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ tasks Task[] @relation("CustomerTasks")
+ offers Offer[]
+ taskerProfile TaskerProfile?
+ paymentTickets PaymentTicket[]
+ payouts Payout[]
+ auditEvents AuditLog[] @relation("AuditActor")
+}
+model TaskerProfile {
+ id String @id @default(cuid())
+ userId String @unique
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ bio String? @db.Text
+ skills String[]
+ serviceAreas String[]
+ bankName String?
+ beneficiaryName String?
+ bankAccountEncrypted String?
+ bankAccountLast4 String?
+ bankAccountVerified Boolean @default(false)
+ verificationStatus String @default("NOT_STARTED")
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Task {
+ id String @id @default(cuid())
+ bookingId String @unique
+ customerId String
+ customer User @relation("CustomerTasks",fields:[customerId],references:[id])
+ title String
+ description String @db.Text
+ category String
+ parish String
+ area String?
+ addressEncrypted String?
+ budgetJmd Int?
+ scheduledAt DateTime?
+ status TaskStatus @default(OPEN)
+ selectedTaskerId String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ offers Offer[]
+ paymentTickets PaymentTicket[]
+ payouts Payout[]
+}
+model Offer {
+ id String @id @default(cuid())
+ offerId String @unique
+ taskId String
+ task Task @relation(fields:[taskId],references:[id],onDelete:Cascade)
+ taskerId String
+ tasker User @relation(fields:[taskerId],references:[id])
+ requestedJmd Int
+ platformFeeJmd Int
+ customerTotalJmd Int
+ message String? @db.Text
+ proposedAt DateTime?
+ status OfferStatus @default(PENDING)
+ createdAt DateTime @default(now())
+ @@unique([taskId,taskerId])
+}
+model PaymentTicket {
+ id String @id @default(cuid())
+ ticketId String @unique
+ customerId String
+ customer User @relation(fields:[customerId],references:[id])
+ taskId String
+ task Task @relation(fields:[taskId],references:[id])
+ method String
+ amountJmd Int
+ transactionRef String
+ receiptUrl String?
+ status PaymentStatus @default(PAYMENT_SUBMITTED)
+ adminNotes String? @db.Text
+ reviewedById String?
+ submittedAt DateTime @default(now())
+ reviewedAt DateTime?
+ updatedAt DateTime @updatedAt
+ @@index([status,submittedAt])
+ @@index([customerId,submittedAt])
+}
+model Payout {
+ id String @id @default(cuid())
+ payoutId String @unique
+ workerId String
+ worker User @relation(fields:[workerId],references:[id])
+ taskId String?
+ task Task? @relation(fields:[taskId],references:[id])
+ amountJmd Int
+ status PayoutStatus @default(PENDING)
+ batchId String?
+ bankNameSnapshot String?
+ beneficiarySnapshot String?
+ accountLast4 String?
+ bankReference String?
+ eligibleAt DateTime?
+ exportedAt DateTime?
+ paidAt DateTime?
+ failureReason String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([status,eligibleAt])
+ @@index([batchId])
+}
+model PayoutBatch {
+ id String @id @default(cuid())
+ batchId String @unique
+ createdById String
+ totalJmd Int
+ itemCount Int
+ fileName String
+ status String @default("EXPORTED")
+ createdAt DateTime @default(now())
+ reconciledAt DateTime?
+}
+model AuditLog {
+ id String @id @default(cuid())
+ actorId String
+ actor User @relation("AuditActor",fields:[actorId],references:[id])
+ action String
+ targetType String
+ targetId String
+ details Json?
+ createdAt DateTime @default(now())
+ @@index([targetType,targetId,createdAt])
+}
