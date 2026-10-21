@@ -1,8 +1,346 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b6b4f"><title>Yardjobsja — Find help. Get work done.</title><link rel="stylesheet" href="/styles.css"></head>
-<body><header class="topbar"><a class="brand" href="/"><span class="mark">Y</span>Yardjobsja</a><nav><a href="#how">How it works</a><a href="#tasks">Explore tasks</a><a href="#join">Join</a></nav><a class="btn btn-small" href="#join">Get started</a></header>
-<main><section class="hero"><div><p class="eyebrow">MADE FOR JAMAICA 🇯🇲</p><h1>Find help.<br><span>Get work done.</span></h1><p class="lead">Find local help for everyday tasks—or find work and grow your business, parish by parish.</p><div class="actions"><a class="btn" href="#join">Find a tasker</a><a class="btn btn-light" href="#join">Find work</a></div><p class="note">Clear prices · Local services · Bookings you can track</p></div><aside class="hero-card"><div class="check">✓</div><p class="eyebrow">YOUR NEXT TASK, SORTED</p><h2>Help is closer than you think.</h2><div class="row"><i></i>Home cleaning <b>Find help</b></div><div class="row"><i class="gold"></i>Gardening & yard work <b>Find help</b></div><div class="row"><i class="blue"></i>Errands & delivery <b>Find help</b></div></aside></section>
-<section class="section" id="how"><p class="eyebrow">SIMPLE FROM START TO FINISH</p><h2>One place to get things done.</h2><div class="grid"><article><span>01</span><h3>Post your task</h3><p>Describe what you need, where, and when it works for you.</p></article><article><span>02</span><h3>Compare offers</h3><p>Review worker prices and details before choosing.</p></article><article><span>03</span><h3>Book with clarity</h3><p>Confirm the appointment and follow your booking.</p></article></div></section>
-<section class="section tasks" id="tasks"><p class="eyebrow">OPPORTUNITIES</p><h2>Tasks around Jamaica</h2><div class="grid"><article><small>HOME</small><h3>Home cleaning</h3><p>Find help for household cleaning.</p></article><article><small>OUTDOOR</small><h3>Gardening & yard work</h3><p>Find help for routine yard care.</p></article><article><small>ERRANDS</small><h3>Pickup & delivery</h3><p>Get help with local errands.</p></article></div></section>
-<section class="section join" id="join"><div><p class="eyebrow">JOIN THE MARKETPLACE</p><h2>Ready to get started?</h2><p>Create a customer account to post tasks or a tasker account to offer services.</p></div><form id="register"><label>Full name<input name="fullName" autocomplete="name" required minlength="2" maxlength="100"></label><label>Email address<input name="email" type="email" autocomplete="email" required></label><label>Phone (optional)<input name="phone" type="tel" autocomplete="tel"></label><label>I'm joining as<select name="role"><option value="CUSTOMER">Customer — I need help</option><option value="TASKER">Tasker — I want to find work</option></select></label><label>Password <small>(12+ characters)</small><input name="password" type="password" minlength="12" autocomplete="new-password" required></label><button class="btn" type="submit">Create account</button><p id="message" role="status"></p><p class="disclaimer">Early build: payment processing, verification and payout features still need completion before production use.</p></form></section></main>
-<footer><a class="brand" href="/"><span class="mark">Y</span>Yardjobsja</a><p>Helping Jamaica get things done.</p><small>© <span id="year"></span> Yardjobsja</small></footer><script src="/app.js" defer></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b6b4f">
+  <meta name="description" content="Find trusted local help or discover work opportunities across Jamaica.">
+  <title>Yardjobsja | Find Help. Find Work.</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="mark">Y</span> Yardjobsja
+    </a>
+
+    <nav>
+      <a href="#jobs">Available jobs</a>
+      <a href="#post-task">Post a task</a>
+      <a href="#account">My account</a>
+    </nav>
+
+    <button class="btn btn-small" id="open-login" type="button">
+      Sign in
+    </button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">MADE FOR JAMAICA 🇯🇲</p>
+        <h1>Local jobs.<br><span>Real opportunities.</span></h1>
+
+        <p class="lead">
+          Find help for everyday tasks or discover opportunities
+          to earn by providing services in your community.
+        </p>
+
+        <div class="actions">
+          <a class="btn" href="#post-task">Post a task</a>
+          <a class="btn btn-light" href="#jobs">Find work</a>
+        </div>
+
+        <p class="note">
+          Local services · Clear prices · Trackable bookings
+        </p>
+      </div>
+
+      <aside class="hero-card">
+        <p class="eyebrow">FIND YOUR NEXT OPPORTUNITY</p>
+        <h2>What needs to get done?</h2>
+
+        <div class="service-row">🧹 Cleaning and housekeeping</div>
+        <div class="service-row">🌿 Gardening and yard work</div>
+        <div class="service-row">🛒 Grocery pickup and errands</div>
+        <div class="service-row">🔧 Repairs and installations</div>
+        <div class="service-row">🏠 Home help and other tasks</div>
+      </aside>
+    </section>
+
+    <section class="section" id="account">
+      <div class="section-heading">
+        <p class="eyebrow">YOUR ACCOUNT</p>
+        <h2>Join Yardjobsja</h2>
+        <p>Create an account or sign in to access your marketplace features.</p>
+      </div>
+
+      <div class="account-grid">
+        <form id="register">
+          <h3>Create an account</h3>
+
+          <label>
+            Full name
+            <input name="fullName" autocomplete="name"
+                   required minlength="2" maxlength="100">
+          </label>
+
+          <label>
+            Email address
+            <input name="email" type="email" autocomplete="email"
+                   required maxlength="254">
+          </label>
+
+          <label>
+            Phone number
+            <input name="phone" type="tel" autocomplete="tel"
+                   maxlength="30">
+          </label>
+
+          <label>
+            Account type
+            <select name="role" required>
+              <option value="CUSTOMER">Customer — I need help</option>
+              <option value="TASKER">Tasker — I want to find work</option>
+            </select>
+          </label>
+
+          <label>
+            Password (at least 12 characters)
+            <input name="password" type="password"
+                   autocomplete="new-password"
+                   minlength="12" maxlength="128" required>
+          </label>
+
+          <button class="btn full-width" type="submit">
+            Create account
+          </button>
+
+          <p id="register-message" class="form-message" role="status"></p>
+        </form>
+
+        <form id="login">
+          <h3>Welcome back</h3>
+
+          <label>
+            Email address
+            <input name="email" type="email" autocomplete="email"
+                   maxlength="254" required>
+          </label>
+
+          <label>
+            Password
+            <input name="password" type="password"
+                   autocomplete="current-password"
+                   maxlength="128" required>
+          </label>
+
+          <button class="btn full-width" type="submit">
+            Sign in
+          </button>
+
+          <p id="login-message" class="form-message" role="status"></p>
+        </form>
+      </div>
+
+      <div id="signed-in" class="signed-in" hidden>
+        <div>
+          <p class="eyebrow">SIGNED IN</p>
+          <h3 id="welcome-user">Welcome</h3>
+          <p id="account-details"></p>
+        </div>
+        <button id="logout" class="btn btn-light" type="button">
+          Sign out
+        </button>
+      </div>
+    </section>
+
+    <section class="section tasks" id="post-task">
+      <div class="section-heading">
+        <p class="eyebrow">FOR CUSTOMERS</p>
+        <h2>Post a task</h2>
+        <p>Describe the work you need done and let suitable taskers make offers.</p>
+      </div>
+
+      <form id="task-form" class="wide-form" hidden>
+        <label>
+          Job title
+          <input name="title" required minlength="4" maxlength="120"
+                 placeholder="Example: Clean a two-bedroom house">
+        </label>
+
+        <label>
+          Job category
+          <select name="category" required>
+            <option value="">Choose a category</option>
+            <option>Cleaning</option>
+            <option>Gardening</option>
+            <option>Grocery pickup</option>
+            <option>Delivery and errands</option>
+            <option>Babysitting and childcare</option>
+            <option>Painting</option>
+            <option>AC installation and repairs</option>
+            <option>Home maintenance</option>
+            <option>Other</option>
+          </select>
+        </label>
+
+        <label>
+          Description
+          <textarea name="description" required minlength="10"
+                    maxlength="4000" rows="5"
+                    placeholder="Describe the work, requirements and anything the tasker should know."></textarea>
+        </label>
+
+        <label>
+          Parish
+          <select name="parish" required>
+            <option value="">Choose a parish</option>
+            <option>Kingston</option>
+            <option>St. Andrew</option>
+            <option>St. Catherine</option>
+            <option>Clarendon</option>
+            <option>Manchester</option>
+            <option>St. Elizabeth</option>
+            <option>Westmoreland</option>
+            <option>Hanover</option>
+            <option>St. James</option>
+            <option>Trelawny</option>
+            <option>St. Ann</option>
+            <option>St. Mary</option>
+            <option>Portland</option>
+            <option>St. Thomas</option>
+          </select>
+        </label>
+
+        <label>
+          Community or general area
+          <input name="area" maxlength="120"
+                 placeholder="Example: New Kingston">
+        </label>
+
+        <label>
+          Your budget in JMD (optional)
+          <input name="budgetJmd" type="number"
+                 min="1" max="100000000" step="1">
+        </label>
+
+        <label>
+          Preferred date and time (optional)
+          <input name="scheduledAt" type="datetime-local">
+        </label>
+
+        <button class="btn" type="submit">Publish task</button>
+        <p id="task-message" class="form-message" role="status"></p>
+      </form>
+
+      <p id="task-login-notice">
+        Sign in with a customer account to publish a task.
+      </p>
+    </section>
+
+    <section class="section" id="jobs">
+      <div class="section-heading">
+        <p class="eyebrow">MARKETPLACE</p>
+        <h2>Available jobs</h2>
+        <p>Explore tasks currently listed on Yardjobsja.</p>
+      </div>
+
+      <div class="job-toolbar">
+        <label>
+          Search jobs
+          <input id="job-search" type="search"
+                 placeholder="Search jobs or communities">
+        </label>
+
+        <label>
+          Parish
+          <select id="parish-filter">
+            <option value="">All parishes</option>
+            <option>Kingston</option>
+            <option>St. Andrew</option>
+            <option>St. Catherine</option>
+            <option>Clarendon</option>
+            <option>Manchester</option>
+            <option>St. Elizabeth</option>
+            <option>Westmoreland</option>
+            <option>Hanover</option>
+            <option>St. James</option>
+            <option>Trelawny</option>
+            <option>St. Ann</option>
+            <option>St. Mary</option>
+            <option>Portland</option>
+            <option>St. Thomas</option>
+          </select>
+        </label>
+
+        <label>
+          Sort by
+          <select id="job-sort">
+            <option value="newest">Newest</option>
+            <option value="budget">Highest customer budget</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="view-switch" aria-label="Job display options">
+        <button type="button" class="view-button active"
+                data-view="hybrid" aria-pressed="true">
+          Map + Jobs
+        </button>
+        <button type="button" class="view-button"
+                data-view="list" aria-pressed="false">
+          List View
+        </button>
+      </div>
+
+      <div id="hybrid-view">
+        <div class="map-placeholder">
+          <span class="map-symbol">📍</span>
+          <h3>Explore jobs across Jamaica</h3>
+          <p>
+            Job locations and available listings will appear here.
+            The interactive geographic map will be connected in the map integration stage.
+          </p>
+        </div>
+
+        <div id="hybrid-jobs" class="job-grid"></div>
+      </div>
+
+      <div id="list-view" hidden>
+        <div id="list-jobs" class="job-grid"></div>
+      </div>
+
+      <p id="jobs-message" class="form-message" role="status"></p>
+      <button id="refresh-jobs" class="btn btn-light" type="button">
+        Refresh jobs
+      </button>
+    </section>
+
+    <section class="section tasks" id="how">
+      <div class="section-heading">
+        <p class="eyebrow">HOW IT WORKS</p>
+        <h2>Simple from start to finish</h2>
+      </div>
+
+      <div class="info-grid">
+        <article>
+          <span>01</span>
+          <h3>Post or discover</h3>
+          <p>Customers post tasks. Taskers browse available opportunities.</p>
+        </article>
+
+        <article>
+          <span>02</span>
+          <h3>Compare offers</h3>
+          <p>Customers compare tasker offers before making a selection.</p>
+        </article>
+
+        <article>
+          <span>03</span>
+          <h3>Confirm the booking</h3>
+          <p>Follow the agreed booking and payment process.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand" href="/"><span class="mark">Y</span> Yardjobsja</a>
+    <p>Helping Jamaica get things done.</p>
+    <small>© <span id="year"></span> Yardjobsja</small>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
