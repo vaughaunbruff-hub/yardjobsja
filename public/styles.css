@@ -1121,3 +1121,69 @@ footer a:hover {
     padding: 11px 14px;
   }
 }
+/* Fix the individual service cards in the hero section */
+
+.hero-card {
+  padding: 28px;
+}
+
+.hero-card .service-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 13px 15px;
+  color: var(--ink);
+  background: #f5f8f5;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 0.94rem;
+  font-weight: 600;
+}
+
+.hero-card .service-row:hover {
+  background: #e7f5ec;
+  border-color: #b6d9c3;
+}
+
+.actions .btn {
+  text-decoration: none;
+}
+
+.actions .btn-light {
+  color: var(--g);
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.form-message {
+  margin-top: 12px;
+  font-size: 0.9rem;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.map-placeholder .map-symbol {
+  font-size: 2rem;
+}
+
+.info-grid > article > span {
+  display: inline-flex;
+  margin-bottom: 14px;
+  color: var(--g);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .hero-card {
+    padding: 20px;
+  }
+
+  .hero-card .service-row {
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+}
