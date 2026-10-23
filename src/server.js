@@ -18,7 +18,53 @@ async function auth(req,res,next){try{const t=req.cookies.yj_session;if(!t)retur
 const roles=(...r)=>(req,res,next)=>req.user&&r.includes(req.user.role)?next():res.status(403).json({error:"Not authorized."});
 app.get("/api/health",(_q,s)=>s.json({ok:true,service:"yardjobsja"}));
 app.post("/api/register",wrap(async(req,res)=>{const d=z.object({fullName:z.string().trim().min(2).max(100),email:z.string().trim().email().max(254).transform(v=>v.toLowerCase()),password:z.string().min(12).max(128),role:z.enum(["CUSTOMER","TASKER"]),phone:z.string().trim().max(30).optional()}).parse(req.body);const u=await prisma.user.create({data:{accountId:id(d.role==="TASKER"?"TK":"CT"),fullName:d.fullName,email:d.email,passwordHash:await bcrypt.hash(d.password,12),role:d.role,status:"ACTIVE",phone:d.phone||null,...(d.role==="TASKER"?{taskerProfile:{create:{skills:[],serviceAreas:[]}}}:{})},select:{id:true,accountId:true,fullName:true,email:true,role:true,status:true}});session(res,u);res.status(201).json({user:u});}));
-app.post("/api/login",wrap(async(req,res)=>{const d=z.object({email:z.string().email().transform(v=>v.toLowerCase()),password:z.string().min(1).max(128)}).parse(req.body);const u=await prisma.user.findUnique({where:{email:d.email}});if(!u||u.status!=="ACTIVE"||!(await bcrypt.compare(d.password,u.passwordHash)))return res.status(401).json({error:"Email or password is incorrect."});session(res,u);res.json({user:{accountId:u.accountId,fullName:u.fullName,email:u.email,role:u.role}});}));
+app.post("/api/login", wrap(async (req, res) => {
+  const data = z.object({
+    email: z.string().trim().email().max(254)
+      .transform(value => value.toLowerCase()),
+    password: z.string().min(1).max(128)
+  }).parse(req.body);
+
+  const approvedAdmins = new Set(
+    (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  let user = await prisma.user.findUnique({
+    where: { email: data.email }
+  });
+
+  if (
+    !user ||
+    user.status !== "ACTIVE" ||
+    !(await bcrypt.compare(data.password, user.passwordHash))
+  ) {
+    return res.status(401).json({
+      error: "Email or password is incorrect."
+    });
+  }
+
+  // Only an explicitly approved email can receive admin privileges.
+  if (approvedAdmins.has(user.email) && user.role !== "ADMIN") {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: "ADMIN" }
+    });
+  }
+
+  session(res, user);
+
+  return res.json({
+    user: {
+      accountId: user.accountId,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role
+    }
+  });
+}));
 app.post("/api/logout",(_q,s)=>{s.clearCookie("yj_session",{httpOnly:true,sameSite:"lax",path:"/"});s.json({ok:true});});
 app.get("/api/me",auth,(q,s)=>{const {id,accountId,fullName,email,role,phone,createdAt}=q.user;s.json({user:{id,accountId,fullName,email,role,phone,createdAt}});});
 app.get("/api/tasks",wrap(async(_q,s)=>{const tasks=await prisma.task.findMany({where:{status:"OPEN"},orderBy:{createdAt:"desc"},take:50,select:{bookingId:true,title:true,description:true,category:true,parish:true,area:true,budgetJmd:true,scheduledAt:true,createdAt:true,status:true}});s.json({tasks});}));
