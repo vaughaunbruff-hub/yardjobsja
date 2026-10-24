@@ -69,7 +69,18 @@ app.post("/api/logout",(_q,s)=>{s.clearCookie("yj_session",{httpOnly:true,sameSi
 app.get("/api/me",auth,(q,s)=>{const {id,accountId,fullName,email,role,phone,createdAt}=q.user;s.json({user:{id,accountId,fullName,email,role,phone,createdAt}});});
 app.get("/api/tasks",wrap(async(_q,s)=>{const tasks=await prisma.task.findMany({where:{status:"OPEN"},orderBy:{createdAt:"desc"},take:50,select:{bookingId:true,title:true,description:true,category:true,parish:true,area:true,budgetJmd:true,scheduledAt:true,createdAt:true,status:true}});s.json({tasks});}));
 app.post("/api/tasks",auth,roles("CUSTOMER"),wrap(async(q,s)=>{const d=z.object({title:z.string().trim().min(4).max(120),description:z.string().trim().min(10).max(4000),category:z.string().trim().min(2).max(80),parish:z.string().trim().min(2).max(80),area:z.string().trim().max(120).optional(),budgetJmd:z.number().int().positive().max(100000000).optional(),scheduledAt:z.string().datetime().optional()}).parse(q.body);const task=await prisma.task.create({data:{bookingId:id("JOB"),customerId:q.user.id,...d,scheduledAt:d.scheduledAt?new Date(d.scheduledAt):null},select:{bookingId:true,title:true,description:true,category:true,parish:true,area:true,budgetJmd:true,scheduledAt:true,status:true,createdAt:true}});s.status(201).json({task});}));
-app.post("/api/tasks/:bookingId/offers",auth,roles("TASKER"),wrap(async(q,s)=>{const d=z.object({requestedJmd:z.number().int().positive().max(100000000),message:z.string().trim().max(2000).optional(),proposedAt:z.string().datetime().optional()}).parse(q.body);const task=await prisma.task.findUnique({where:{bookingId:q.params.bookingId}});if(!task||task.status!=="OPEN")return s.status(404).json({error:"Job not available."});if(task.customerId===q.user.id)return s.status(400).json({error:"You cannot offer on your own job."});const fee=Math.round(d.requestedJmd*.10);const offer=await prisma.offer.create({data:{offerId:id("OFF"),taskId:task.id,taskerId:q.user.id,requestedJmd:d.requestedJmd,platformFeeJmd:fee,customerTotalJmd:d.requestedJmd+fee,message:d.message||null,proposedAt:d.proposedAt?new Date(d.proposedAt):null},select:{offerId:true,requestedJmd:true,platformFeeJmd:true,customerTotalJmd:true,message:true,proposedAt:true,status:true}});s.status(201).json({offer,feeNotice:"A 10% platform commission is added to your requested amount and shown to the customer."});}));
+app.post("/api/tasks/:bookingId/offers",auth,roles("TASKER"),wrap(async(q,s)=>{const d=z.object({requestedJmd:z.number().int().positive().max(100000000),message:z.string().trim().max(2000).optional(),proposedAt:z.string().datetime().optional()}).parse(q.body);const task=await prisma.task.findUnique({where:{bookingId:q.params.bookingId}});if(!task||task.status!=="OPEN")return s.status(404).json({error:"Job not available."});if(task.customerId===q.user.id)return s.status(400).json({error:"You cannot offer on your own job."});const fee=Math.round(d.requestedJmd*.10);const offer=await prisma.offer.create({data:{offerId:id("OFF"),taskId:task.id,taskerId:q.user.id,requestedJmd:d.requestedJmd,platformFeeJmd:fee,customerTotalJmd:d.requestedJmd+fee,message:d.message||null,proposedAt:d.proposedAt?new Date(d.proposedAt):null},select:{offerId:true,requestedJmd:true,platformFeeJmd:true,customerTotalJmd:true,message:true,proposedAt:true,status:true}});s.status(201).json({
+  offer: {
+    offerId: offer.offerId,
+    requestedJmd: offer.requestedJmd,
+    platformFeeJmd: offer.platformFeeJmd,
+    customerTotalJmd: offer.customerTotalJmd,
+    message: offer.message,
+    proposedAt: offer.proposedAt,
+    status: offer.status
+  },
+  message: "Your offer has been submitted."
+});}));
 /* =========================================
    CUSTOMER TASK HISTORY AND OFFERS
 ========================================= */
@@ -94,7 +105,6 @@ app.get(
           select: {
             offerId: true,
             requestedJmd: true,
-            platformFeeJmd: true,
             customerTotalJmd: true,
             message: true,
             proposedAt: true,
@@ -247,9 +257,286 @@ app.post(
     res.json(outcome);
   })
 );
-app.post("/api/payment-tickets",auth,roles("CUSTOMER"),wrap(async(q,s)=>{const d=z.object({bookingId:z.string().min(5).max(100),method:z.enum(["LYNK","BPAY","NCB_TRANSFER","CIBC_TRANSFER","OTHER"]),amountJmd:z.number().int().positive().max(100000000),transactionRef:z.string().trim().min(3).max(160),receiptUrl:z.string().url().max(1000).optional()}).parse(q.body);const task=await prisma.task.findUnique({where:{bookingId:d.bookingId}});if(!task||task.customerId!==q.user.id)return s.status(404).json({error:"Booking not found."});const ticket=await prisma.paymentTicket.create({data:{ticketId:id("PAY"),customerId:q.user.id,taskId:task.id,method:d.method,amountJmd:d.amountJmd,transactionRef:d.transactionRef,receiptUrl:d.receiptUrl||null,status:"AWAITING_REVIEW"},select:{ticketId:true,status:true,amountJmd:true,submittedAt:true}});s.status(201).json({ticket,notificationDelivery:"NOT_CONFIGURED",notificationEmail:process.env.TICKET_NOTIFICATION_EMAIL||"yardjobsja@gmail.com",message:"Awaiting authorized payment review. Receipt or reference alone does not confirm payment."});}));
+app.post(
+  "/api/payment-tickets",
+  auth,
+  roles("CUSTOMER"),
+  wrap(async (req, res) => {
+    const data = z.object({
+      bookingId: z.string().min(5).max(100),
+      method: z.enum([
+        "LYNK",
+        "BPAY",
+        "NCB_TRANSFER",
+        "CIBC_TRANSFER",
+        "OTHER"
+      ]),
+      amountJmd: z.number().int().positive().max(100000000),
+      transactionRef: z.string().trim().min(3).max(160),
+      receiptUrl: z.string().url().max(1000).optional()
+    }).parse(req.body);
+    const outcome = await prisma.$transaction(async (tx) => {
+      const task = await tx.task.findUnique({
+        where: {
+          bookingId: data.bookingId
+        }
+      });
+      if (!task || task.customerId !== req.user.id) {
+        return {
+          error: "Booking not found.",
+          status: 404
+        };
+      }
+      if (
+        task.status !== "OFFER_SELECTED" ||
+        !task.selectedTaskerId
+      ) {
+        return {
+          error: "Accept a tasker's offer before submitting payment.",
+          status: 409
+        };
+      }
+      const acceptedOffer = await tx.offer.findFirst({
+        where: {
+          taskId: task.id,
+          taskerId: task.selectedTaskerId,
+          status: "ACCEPTED"
+        },
+        select: {
+          customerTotalJmd: true
+        }
+      });
+      if (!acceptedOffer) {
+        return {
+          error: "No accepted offer was found for this booking.",
+          status: 409
+        };
+      }
+      if (data.amountJmd !== acceptedOffer.customerTotalJmd) {
+        return {
+          error: "The payment amount must match the accepted offer's total.",
+          status: 400
+        };
+      }
+      const existingTicket = await tx.paymentTicket.findFirst({
+        where: {
+          taskId: task.id,
+          status: {
+            notIn: [
+              "PAYMENT_REJECTED",
+              "CANCELLED"
+            ]
+          }
+        },
+        select: {
+          ticketId: true,
+          status: true
+        }
+      });
+      if (existingTicket) {
+        return {
+          error: "A payment ticket already exists for this booking.",
+          status: 409
+        };
+      }
+      const ticket = await tx.paymentTicket.create({
+        data: {
+          ticketId: id("PAY"),
+          customerId: req.user.id,
+          taskId: task.id,
+          method: data.method,
+          amountJmd: data.amountJmd,
+          transactionRef: data.transactionRef,
+          receiptUrl: data.receiptUrl || null,
+          status: "AWAITING_REVIEW"
+        },
+        select: {
+          ticketId: true,
+          status: true,
+          amountJmd: true,
+          submittedAt: true
+        }
+      });
+      return {
+        ticket
+      };
+    });
+    if (outcome.error) {
+      return res.status(outcome.status).json({
+        error: outcome.error
+      });
+    }
+    res.status(201).json({
+      ticket: outcome.ticket,
+      notificationDelivery: "NOT_CONFIGURED",
+      notificationEmail:
+        process.env.TICKET_NOTIFICATION_EMAIL ||
+        "yardjobsja@gmail.com",
+      message:
+        "Your payment details have been submitted. " +
+        "Your booking remains unconfirmed until an admin verifies payment."
+    });
+  })
+);
 app.get("/api/admin/payment-tickets",auth,roles("ADMIN"),wrap(async(_q,s)=>{const tickets=await prisma.paymentTicket.findMany({orderBy:{submittedAt:"asc"},take:200,include:{customer:{select:{accountId:true,fullName:true,email:true}},task:{select:{bookingId:true,title:true}}}});s.json({tickets});}));
-app.patch("/api/admin/payment-tickets/:ticketId",auth,roles("ADMIN"),wrap(async(q,s)=>{const d=z.object({status:z.enum(["UNDER_REVIEW","MORE_INFO_REQUIRED","PAYMENT_VERIFIED","PAYMENT_REJECTED","ESCALATED"]),adminNotes:z.string().trim().max(3000).optional()}).parse(q.body);const old=await prisma.paymentTicket.findUnique({where:{ticketId:q.params.ticketId}});if(!old)return s.status(404).json({error:"Ticket not found."});const ticket=await prisma.paymentTicket.update({where:{ticketId:q.params.ticketId},data:{status:d.status,adminNotes:d.adminNotes||null,reviewedById:q.user.id,reviewedAt:new Date()},select:{ticketId:true,status:true,adminNotes:true,reviewedAt:true}});await prisma.auditLog.create({data:{actorId:q.user.id,action:"PAYMENT_TICKET_STATUS_CHANGED",targetType:"PaymentTicket",targetId:old.id,details:{status:d.status}}});s.json({ticket});}));
+app.patch(
+  "/api/admin/payment-tickets/:ticketId",
+  auth,
+  roles("ADMIN"),
+  wrap(async (req, res) => {
+    const data = z.object({
+      status: z.enum([
+        "UNDER_REVIEW",
+        "MORE_INFO_REQUIRED",
+        "PAYMENT_VERIFIED",
+        "PAYMENT_REJECTED",
+        "ESCALATED"
+      ]),
+      adminNotes: z.string().trim().max(3000).optional()
+    }).parse(req.body);
+
+    const outcome = await prisma.$transaction(async (tx) => {
+      const ticket = await tx.paymentTicket.findUnique({
+        where: {
+          ticketId: req.params.ticketId
+        }
+      });
+
+      if (!ticket) {
+        return {
+          error: "Payment ticket not found.",
+          status: 404
+        };
+      }
+
+      if (ticket.status === "PAYMENT_VERIFIED") {
+        return {
+          error: "This payment has already been verified and cannot be changed.",
+          status: 409
+        };
+      }
+
+      if (data.status === "PAYMENT_VERIFIED") {
+        const task = await tx.task.findUnique({
+          where: {
+            id: ticket.taskId
+          }
+        });
+
+        if (
+          !task ||
+          task.customerId !== ticket.customerId ||
+          task.status !== "OFFER_SELECTED" ||
+          !task.selectedTaskerId
+        ) {
+          return {
+            error: "The booking is not eligible for payment verification.",
+            status: 409
+          };
+        }
+
+        const acceptedOffer = await tx.offer.findFirst({
+          where: {
+            taskId: task.id,
+            taskerId: task.selectedTaskerId,
+            status: "ACCEPTED"
+          },
+          select: {
+            customerTotalJmd: true
+          }
+        });
+
+        if (
+          !acceptedOffer ||
+          ticket.amountJmd !== acceptedOffer.customerTotalJmd
+        ) {
+          return {
+            error: "The payment amount does not match the accepted offer.",
+            status: 409
+          };
+        }
+
+        const updatedTask = await tx.task.updateMany({
+          where: {
+            id: task.id,
+            customerId: ticket.customerId,
+            status: "OFFER_SELECTED",
+            selectedTaskerId: task.selectedTaskerId
+          },
+          data: {
+            status: "BOOKED"
+          }
+        });
+
+        if (updatedTask.count !== 1) {
+          return {
+            error: "The booking changed during verification. Please refresh and try again.",
+            status: 409
+          };
+        }
+      }
+
+      const updatedTicket = await tx.paymentTicket.update({
+        where: {
+          id: ticket.id
+        },
+        data: {
+          status: data.status,
+          adminNotes: data.adminNotes || null,
+          reviewedById: req.user.id,
+          reviewedAt: new Date()
+        },
+        select: {
+          ticketId: true,
+          status: true,
+          adminNotes: true,
+          reviewedAt: true
+        }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: req.user.id,
+          action: "PAYMENT_TICKET_STATUS_CHANGED",
+          targetType: "PaymentTicket",
+          targetId: ticket.id,
+          details: {
+            status: data.status,
+            bookingId: (
+              await tx.task.findUnique({
+                where: {
+                  id: ticket.taskId
+                },
+                select: {
+                  bookingId: true
+                }
+              })
+            )?.bookingId || null
+          }
+        }
+      });
+
+      return {
+        ticket: updatedTicket,
+        bookingConfirmed: data.status === "PAYMENT_VERIFIED"
+      };
+    });
+
+    if (outcome.error) {
+      return res.status(outcome.status).json({
+        error: outcome.error
+      });
+    }
+
+    res.json({
+      ticket: outcome.ticket,
+      bookingConfirmed: outcome.bookingConfirmed,
+      message: outcome.bookingConfirmed
+        ? "Payment verified and booking confirmed."
+        : "Payment ticket status updated."
+    });
+  })
+);
 app.use((e,_q,s,_n)=>{if(e instanceof z.ZodError)return s.status(400).json({error:"Please check the submitted information.",details:e.issues.map(i=>({field:i.path.join("."),message:i.message}))});if(e.code==="P2002")return s.status(409).json({error:"That account or record already exists."});console.error(e);s.status(500).json({error:"Something went wrong. Please try again."});});
 const server=app.listen(PORT,()=>console.log(`Yardjobsja listening on ${PORT}`));
 async function close(){server.close();await prisma.$disconnect();process.exit(0)}process.on("SIGTERM",close);process.on("SIGINT",close);
