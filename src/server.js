@@ -70,6 +70,183 @@ app.get("/api/me",auth,(q,s)=>{const {id,accountId,fullName,email,role,phone,cre
 app.get("/api/tasks",wrap(async(_q,s)=>{const tasks=await prisma.task.findMany({where:{status:"OPEN"},orderBy:{createdAt:"desc"},take:50,select:{bookingId:true,title:true,description:true,category:true,parish:true,area:true,budgetJmd:true,scheduledAt:true,createdAt:true,status:true}});s.json({tasks});}));
 app.post("/api/tasks",auth,roles("CUSTOMER"),wrap(async(q,s)=>{const d=z.object({title:z.string().trim().min(4).max(120),description:z.string().trim().min(10).max(4000),category:z.string().trim().min(2).max(80),parish:z.string().trim().min(2).max(80),area:z.string().trim().max(120).optional(),budgetJmd:z.number().int().positive().max(100000000).optional(),scheduledAt:z.string().datetime().optional()}).parse(q.body);const task=await prisma.task.create({data:{bookingId:id("JOB"),customerId:q.user.id,...d,scheduledAt:d.scheduledAt?new Date(d.scheduledAt):null},select:{bookingId:true,title:true,description:true,category:true,parish:true,area:true,budgetJmd:true,scheduledAt:true,status:true,createdAt:true}});s.status(201).json({task});}));
 app.post("/api/tasks/:bookingId/offers",auth,roles("TASKER"),wrap(async(q,s)=>{const d=z.object({requestedJmd:z.number().int().positive().max(100000000),message:z.string().trim().max(2000).optional(),proposedAt:z.string().datetime().optional()}).parse(q.body);const task=await prisma.task.findUnique({where:{bookingId:q.params.bookingId}});if(!task||task.status!=="OPEN")return s.status(404).json({error:"Job not available."});if(task.customerId===q.user.id)return s.status(400).json({error:"You cannot offer on your own job."});const fee=Math.round(d.requestedJmd*.10);const offer=await prisma.offer.create({data:{offerId:id("OFF"),taskId:task.id,taskerId:q.user.id,requestedJmd:d.requestedJmd,platformFeeJmd:fee,customerTotalJmd:d.requestedJmd+fee,message:d.message||null,proposedAt:d.proposedAt?new Date(d.proposedAt):null},select:{offerId:true,requestedJmd:true,platformFeeJmd:true,customerTotalJmd:true,message:true,proposedAt:true,status:true}});s.status(201).json({offer,feeNotice:"A 10% platform commission is added to your requested amount and shown to the customer."});}));
+/* =========================================
+   CUSTOMER TASK HISTORY AND OFFERS
+========================================= */
+
+app.get(
+  "/api/my-tasks",
+  auth,
+  roles("CUSTOMER"),
+  wrap(async (req, res) => {
+    const tasks = await prisma.task.findMany({
+      where: {
+        customerId: req.user.id
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      include: {
+        offers: {
+          orderBy: {
+            createdAt: "asc"
+          },
+          select: {
+            offerId: true,
+            requestedJmd: true,
+            platformFeeJmd: true,
+            customerTotalJmd: true,
+            message: true,
+            proposedAt: true,
+            status: true,
+            createdAt: true,
+            tasker: {
+              select: {
+                accountId: true,
+                fullName: true,
+                taskerProfile: {
+                  select: {
+                    bio: true,
+                    skills: true,
+                    serviceAreas: true,
+                    verificationStatus: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    res.json({ tasks });
+  })
+);
+
+
+/* =========================================
+   CUSTOMER ACCEPTS A TASKER OFFER
+========================================= */
+
+app.post(
+  "/api/tasks/:bookingId/offers/:offerId/accept",
+  auth,
+  roles("CUSTOMER"),
+  wrap(async (req, res) => {
+    const outcome = await prisma.$transaction(async (tx) => {
+      const task = await tx.task.findUnique({
+        where: {
+          bookingId: req.params.bookingId
+        }
+      });
+
+      if (!task || task.customerId !== req.user.id) {
+        return {
+          error: "Task not found.",
+          status: 404
+        };
+      }
+
+      if (task.status !== "OPEN") {
+        return {
+          error: "This task is no longer open for offer selection.",
+          status: 409
+        };
+      }
+
+      const offer = await tx.offer.findUnique({
+        where: {
+          offerId: req.params.offerId
+        },
+        select: {
+          id: true,
+          offerId: true,
+          taskId: true,
+          taskerId: true,
+          requestedJmd: true,
+          platformFeeJmd: true,
+          customerTotalJmd: true,
+          status: true
+        }
+      });
+
+      if (!offer || offer.taskId !== task.id) {
+        return {
+          error: "Offer not found for this task.",
+          status: 404
+        };
+      }
+
+      if (offer.status !== "PENDING") {
+        return {
+          error: "This offer is no longer available.",
+          status: 409
+        };
+      }
+
+      const updatedTask = await tx.task.updateMany({
+        where: {
+          id: task.id,
+          status: "OPEN"
+        },
+        data: {
+          status: "OFFER_SELECTED",
+          selectedTaskerId: offer.taskerId
+        }
+      });
+
+      if (updatedTask.count !== 1) {
+        return {
+          error: "This task has already been selected or changed.",
+          status: 409
+        };
+      }
+
+      await tx.offer.update({
+        where: {
+          id: offer.id
+        },
+        data: {
+          status: "ACCEPTED"
+        }
+      });
+
+      await tx.offer.updateMany({
+        where: {
+          taskId: task.id,
+          id: {
+            not: offer.id
+          },
+          status: "PENDING"
+        },
+        data: {
+          status: "DECLINED"
+        }
+      });
+
+      return {
+        task: {
+          bookingId: task.bookingId,
+          status: "OFFER_SELECTED"
+        },
+        offer: {
+          offerId: offer.offerId,
+          customerTotalJmd: offer.customerTotalJmd
+        },
+        message:
+          "Offer accepted. Continue to payment to proceed."
+      };
+    });
+
+    if (outcome.error) {
+      return res.status(outcome.status).json({
+        error: outcome.error
+      });
+    }
+
+    res.json(outcome);
+  })
+);
 app.post("/api/payment-tickets",auth,roles("CUSTOMER"),wrap(async(q,s)=>{const d=z.object({bookingId:z.string().min(5).max(100),method:z.enum(["LYNK","BPAY","NCB_TRANSFER","CIBC_TRANSFER","OTHER"]),amountJmd:z.number().int().positive().max(100000000),transactionRef:z.string().trim().min(3).max(160),receiptUrl:z.string().url().max(1000).optional()}).parse(q.body);const task=await prisma.task.findUnique({where:{bookingId:d.bookingId}});if(!task||task.customerId!==q.user.id)return s.status(404).json({error:"Booking not found."});const ticket=await prisma.paymentTicket.create({data:{ticketId:id("PAY"),customerId:q.user.id,taskId:task.id,method:d.method,amountJmd:d.amountJmd,transactionRef:d.transactionRef,receiptUrl:d.receiptUrl||null,status:"AWAITING_REVIEW"},select:{ticketId:true,status:true,amountJmd:true,submittedAt:true}});s.status(201).json({ticket,notificationDelivery:"NOT_CONFIGURED",notificationEmail:process.env.TICKET_NOTIFICATION_EMAIL||"yardjobsja@gmail.com",message:"Awaiting authorized payment review. Receipt or reference alone does not confirm payment."});}));
 app.get("/api/admin/payment-tickets",auth,roles("ADMIN"),wrap(async(_q,s)=>{const tickets=await prisma.paymentTicket.findMany({orderBy:{submittedAt:"asc"},take:200,include:{customer:{select:{accountId:true,fullName:true,email:true}},task:{select:{bookingId:true,title:true}}}});s.json({tickets});}));
 app.patch("/api/admin/payment-tickets/:ticketId",auth,roles("ADMIN"),wrap(async(q,s)=>{const d=z.object({status:z.enum(["UNDER_REVIEW","MORE_INFO_REQUIRED","PAYMENT_VERIFIED","PAYMENT_REJECTED","ESCALATED"]),adminNotes:z.string().trim().max(3000).optional()}).parse(q.body);const old=await prisma.paymentTicket.findUnique({where:{ticketId:q.params.ticketId}});if(!old)return s.status(404).json({error:"Ticket not found."});const ticket=await prisma.paymentTicket.update({where:{ticketId:q.params.ticketId},data:{status:d.status,adminNotes:d.adminNotes||null,reviewedById:q.user.id,reviewedAt:new Date()},select:{ticketId:true,status:true,adminNotes:true,reviewedAt:true}});await prisma.auditLog.create({data:{actorId:q.user.id,action:"PAYMENT_TICKET_STATUS_CHANGED",targetType:"PaymentTicket",targetId:old.id,details:{status:d.status}}});s.json({ticket});}));
