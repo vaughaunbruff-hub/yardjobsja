@@ -1,28 +1,26 @@
-“use strict”;
-
 const RESEND_API_URL = “https://api.resend.com/emails”;
 
-/* ––––––––––––––––––––
-HTML SAFETY
-–––––––––––––––––––– */
+/* HTML SAFETY */
 
 function escapeHtml(value) {
-return String(value ?? “”).replace(/[&<>”’]/g, (character) => ({
+return String(value ?? “”).replace(/[&<>”’]/g, (character) => {
+const entities = {
 “&”: “&”,
 “<”: “<”,
 “>”: “>”,
 ‘”’: “"”,
 “’”: “'”
-})[character]);
+};
+
+return entities[character];
+
+});
 }
 
-/* ––––––––––––––––––––
-EMAIL TEMPLATE
-–––––––––––––––––––– */
+/* EMAIL TEMPLATE */
 
 function emailLayout(title, content) {
-return `
-<!doctype html>
+return `<!doctype html>
 
 <html lang="en">
 <head>
@@ -40,22 +38,15 @@ return `
       <h2 style="margin-top:0;">${escapeHtml(title)}</h2>
       ${content}
       <hr style="border:0;border-top:1px solid #e1e9e3;margin:28px 0 16px;">
-      <p style="font-size:12px;color:#65756b;">
-        Yardjobsja · Helping Jamaica get things done.
-      </p>
-      <p style="font-size:12px;color:#65756b;">
-        Support: support@yardjobsja.com
-      </p>
+      <p style="font-size:12px;color:#65756b;">Yardjobsja - Helping Jamaica get things done.</p>
+      <p style="font-size:12px;color:#65756b;">Support: support@yardjobsja.com</p>
     </div>
   </div>
 </body>
-</html>
-`;
+</html>`;
 }
 
-/* ––––––––––––––––––––
-SEND EMAIL THROUGH RESEND
-–––––––––––––––––––– */
+/* SEND EMAIL THROUGH RESEND */
 
 async function sendEmail({ to, subject, html, text }) {
 const apiKey = process.env.RESEND_API_KEY;
@@ -70,9 +61,7 @@ recipients.some(
 (email) => typeof email !== “string” || !email.trim()
 )
 ) {
-console.error(
-“Yardjobsja email not sent: missing email configuration or recipient.”
-);
+console.error(“Yardjobsja email not sent: missing configuration or recipient.”);
 
 return {
   accepted: false,
@@ -101,10 +90,7 @@ const result = await response.json().catch(() => ({}));
 if (!response.ok) {
   console.error("Resend rejected an email request:", {
     status: response.status,
-    message:
-      result.message ||
-      result.name ||
-      "Provider rejected request"
+    message: result.message || result.name || "Provider rejected request"
   });
   return {
     accepted: false,
@@ -118,10 +104,7 @@ return {
 };
 
 } catch (error) {
-console.error(
-“Yardjobsja email request failed:”,
-error.message
-);
+console.error(“Yardjobsja email request failed:”, error.message);
 
 return {
   accepted: false,
@@ -131,9 +114,7 @@ return {
 }
 }
 
-/* ––––––––––––––––––––
-CUSTOMER AND TASKER WELCOME EMAILS
-–––––––––––––––––––– */
+/* CUSTOMER AND TASKER WELCOME EMAILS */
 
 async function sendWelcomeEmail(user) {
 const name = escapeHtml(user.fullName);
@@ -167,19 +148,11 @@ Your account ID: ${user.accountId},
 });
 }
 
-/* ––––––––––––––––––––
-ADMIN PAYMENT-TICKET NOTIFICATION
-–––––––––––––––––––– */
+/* ADMIN PAYMENT-TICKET NOTIFICATION */
 
-async function sendAdminTicketNotice(
-ticket,
-customer,
-bookingId,
-title
-) {
+async function sendAdminTicketNotice(ticket, customer, bookingId, title) {
 const adminEmail =
-process.env.TICKET_NOTIFICATION_EMAIL ||
-“yardjobsja@gmail.com”;
+process.env.TICKET_NOTIFICATION_EMAIL || “yardjobsja@gmail.com”;
 
 const amount = Number(ticket.amountJmd).toLocaleString(“en-JM”);
 
@@ -206,16 +179,9 @@ Transaction reference: ${ticket.transactionRef}
 });
 }
 
-/* ––––––––––––––––––––
-CUSTOMER PAYMENT-TICKET STATUS EMAIL
-–––––––––––––––––––– */
+/* CUSTOMER PAYMENT-TICKET STATUS EMAIL */
 
-async function sendCustomerTicketStatus(
-ticket,
-customer,
-bookingId,
-title
-) {
+async function sendCustomerTicketStatus(ticket, customer, bookingId, title) {
 const statusMessages = {
 PAYMENT_SUBMITTED:
 “Your payment information has been submitted.”,
@@ -268,9 +234,7 @@ ticket.adminNotes
 });
 }
 
-/* ––––––––––––––––––––
-EXPORT FUNCTIONS
-–––––––––––––––––––– */
+/* EXPORT FUNCTIONS */
 
 module.exports = {
 sendEmail,
