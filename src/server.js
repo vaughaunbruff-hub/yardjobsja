@@ -66,14 +66,22 @@ app.post(
 
     session(res, user);
 
-    const emailResult = await sendWelcomeEmail(user);
+let welcomeEmail = "NOT_SENT";
 
-    res.status(201).json({
-      user,
-      welcomeEmail: emailResult.accepted
-        ? "ACCEPTED_BY_PROVIDER"
-        : "NOT_SENT"
-    });
+try {
+  const emailResult = await sendWelcomeEmail(user);
+
+  if (emailResult.accepted) {
+    welcomeEmail = "ACCEPTED_BY_PROVIDER";
+  }
+} catch (error) {
+  console.error("Welcome email failed:", error.message);
+}
+
+res.status(201).json({
+  user,
+  welcomeEmail
+});
   })
 );
 app.post("/api/login", wrap(async (req, res) => {
