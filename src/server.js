@@ -2,6 +2,11 @@ require("dotenv").config();
 const express=require("express"), helmet=require("helmet"), cookieParser=require("cookie-parser");
 const rateLimit=require("express-rate-limit"), bcrypt=require("bcryptjs"), jwt=require("jsonwebtoken");
 const {PrismaClient}=require("@prisma/client"), {z}=require("zod"), crypto=require("node:crypto"), path=require("node:path");
+const {
+  sendWelcomeEmail,
+  sendAdminTicketNotice,
+  sendCustomerTicketStatus
+} = require("./email");
 const app = express();
 app.set("trust proxy", 1);
 const prisma = new PrismaClient();
@@ -17,7 +22,60 @@ function session(res,u){res.cookie("yj_session",jwt.sign({sub:u.id},SECRET,{expi
 async function auth(req,res,next){try{const t=req.cookies.yj_session;if(!t)return res.status(401).json({error:"Please sign in."});const d=jwt.verify(t,SECRET);const u=await prisma.user.findUnique({where:{id:d.sub}});if(!u||u.status!=="ACTIVE")return res.status(401).json({error:"Account is not active."});req.user=u;next();}catch{return res.status(401).json({error:"Session expired. Please sign in again."});}}
 const roles=(...r)=>(req,res,next)=>req.user&&r.includes(req.user.role)?next():res.status(403).json({error:"Not authorized."});
 app.get("/api/health",(_q,s)=>s.json({ok:true,service:"yardjobsja"}));
-app.post("/api/register",wrap(async(req,res)=>{const d=z.object({fullName:z.string().trim().min(2).max(100),email:z.string().trim().email().max(254).transform(v=>v.toLowerCase()),password:z.string().min(12).max(128),role:z.enum(["CUSTOMER","TASKER"]),phone:z.string().trim().max(30).optional()}).parse(req.body);const u=await prisma.user.create({data:{accountId:id(d.role==="TASKER"?"TK":"CT"),fullName:d.fullName,email:d.email,passwordHash:await bcrypt.hash(d.password,12),role:d.role,status:"ACTIVE",phone:d.phone||null,...(d.role==="TASKER"?{taskerProfile:{create:{skills:[],serviceAreas:[]}}}:{})},select:{id:true,accountId:true,fullName:true,email:true,role:true,status:true}});session(res,u);res.status(201).json({user:u});}));
+app.post(
+  "/api/register",
+  wrap(async (req, res) => {
+    const data = z.object({
+      fullName: z.string().trim().min(2).max(100),
+      email: z.string().trim().email().max(254)
+        .transform(value => value.toLowerCase()),
+      password: z.string().min(12).max(128),
+      role: z.enum(["CUSTOMER", "TASKER"]),
+      phone: z.string().trim().max(30).optional()
+    }).parse(req.body);
+
+    const user = await prisma.user.create({
+      data: {
+        accountId: id(data.role === "TASKER" ? "TK" : "CT"),
+        fullName: data.fullName,
+        email: data.email,
+        passwordHash: await bcrypt.hash(data.password, 12),
+        role: data.role,
+        status: "ACTIVE",
+        phone: data.phone || null,
+        ...(data.role === "TASKER"
+          ? {
+              taskerProfile: {
+                create: {
+                  skills: [],
+                  serviceAreas: []
+                }
+              }
+            }
+          : {})
+      },
+      select: {
+        id: true,
+        accountId: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true
+      }
+    });
+
+    session(res, user);
+
+    const emailResult = await sendWelcomeEmail(user);
+
+    res.status(201).json({
+      user,
+      welcomeEmail: emailResult.accepted
+        ? "ACCEPTED_BY_PROVIDER"
+        : "NOT_SENT"
+    });
+  })
+);
 app.post("/api/login", wrap(async (req, res) => {
   const data = z.object({
     email: z.string().trim().email().max(254)
@@ -366,9 +424,44 @@ app.post(
         error: outcome.error
       });
     }
+    const ticketDetails = await prisma.paymentTicket.findUnique({
+  where: {
+    ticketId: outcome.ticket.ticketId
+  },
+  include: {
+    customer: {
+      select: {
+        accountId: true,
+        fullName: true,
+        email: true
+      }
+    },
+    task: {
+      select: {
+        bookingId: true,
+        title: true
+      }
+    }
+  }
+});
+
+let notificationDelivery = "NOT_SENT";
+
+if (ticketDetails) {
+  const emailResult = await sendAdminTicketNotice(
+    ticketDetails,
+    ticketDetails.customer,
+    ticketDetails.task.bookingId,
+    ticketDetails.task.title
+  );
+
+  notificationDelivery = emailResult.accepted
+    ? "ACCEPTED_BY_PROVIDER"
+    : "NOT_SENT";
+}
     res.status(201).json({
       ticket: outcome.ticket,
-      notificationDelivery: "NOT_CONFIGURED",
+        notificationDelivery,
       notificationEmail:
         process.env.TICKET_NOTIFICATION_EMAIL ||
         "yardjobsja@gmail.com",
@@ -527,14 +620,66 @@ app.patch(
         error: outcome.error
       });
     }
+    const updatedDetails = await prisma.paymentTicket.findUnique({
+  where: {
+    ticketId: outcome.ticket.ticketId
+  },
+  include: {
+    customer: {
+      select: {
+        accountId: true,
+        fullName: true,
+        email: true
+      }
+    },
+    task: {
+      select: {
+        bookingId: true,
+        title: true
+      }
+    }
+  }
+});
+
+let statusEmails = {
+  customer: "NOT_SENT",
+  admin: "NOT_SENT"
+};
+
+if (updatedDetails) {
+  const [customerResult, adminResult] = await Promise.all([
+    sendCustomerTicketStatus(
+      updatedDetails,
+      updatedDetails.customer,
+      updatedDetails.task.bookingId,
+      updatedDetails.task.title
+    ),
+    sendAdminTicketNotice(
+      updatedDetails,
+      updatedDetails.customer,
+      updatedDetails.task.bookingId,
+      updatedDetails.task.title
+    )
+  ]);
+
+  statusEmails = {
+    customer: customerResult.accepted
+      ? "ACCEPTED_BY_PROVIDER"
+      : "NOT_SENT",
+    admin: adminResult.accepted
+      ? "ACCEPTED_BY_PROVIDER"
+      : "NOT_SENT"
+  };
+}
 
     res.json({
-      ticket: outcome.ticket,
-      bookingConfirmed: outcome.bookingConfirmed,
-      message: outcome.bookingConfirmed
-        ? "Payment verified and booking confirmed."
-        : "Payment ticket status updated."
-    });
+  ticket: outcome.ticket,
+  bookingConfirmed: outcome.bookingConfirmed,
+  emailNotifications: statusEmails,
+  message: outcome.bookingConfirmed
+    ? "Payment verified and booking confirmed."
+    : "Payment ticket status updated."
+});
   })
 );
 app.use((e,_q,s,_n)=>{if(e instanceof z.ZodError)return s.status(400).json({error:"Please check the submitted information.",details:e.issues.map(i=>({field:i.path.join("."),message:i.message}))});if(e.code==="P2002")return s.status(409).json({error:"That account or record already exists."});console.error(e);s.status(500).json({error:"Something went wrong. Please try again."});});
