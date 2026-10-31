@@ -59,14 +59,21 @@ async function sendEmail({ to, subject, html, text }) {
       (email) => typeof email !== "string" || !email.trim()
     )
   ) {
-    console.error(
-      "Yardjobsja email not sent: missing configuration or recipient."
-    );
+    console.error(“Yardjobsja email configuration check:”, {
+apiKeyPresent: Boolean(apiKey && apiKey.trim()),
+senderPresent: Boolean(from && from.trim()),
+recipientCount: recipients.length,
+recipientValid: recipients.every(
+(email) =>
+typeof email === “string” &&
+/^[^\s@]+@[^\s@]+.[^\s@]+$/.test(email.trim())
+)
+});
 
-    return {
-      accepted: false,
-      reason: "EMAIL_NOT_CONFIGURED"
-    };
+return {
+  accepted: false,
+  reason: "EMAIL_NOT_CONFIGURED"
+};
   }
 
   try {
